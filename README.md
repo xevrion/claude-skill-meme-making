@@ -18,8 +18,9 @@ renderer, so you never have to explain fonts or text placement.
   to post
 - Captions your own photos locally: Impact top and bottom text, modern white-bar captions,
   or labels placed on the people and objects in the picture
-- Keeps animated GIFs animated, stacks panels, and falls back to imgflip blanks for formats
-  memegen does not have
+- Searches imgflip's whole template library too, thousands of blanks including game, anime,
+  and fandom characters, so "make a Malenia meme" uses a Malenia template
+- Keeps animated GIFs animated and stacks panels
 - Views every render before showing it, then fixes covered faces, unreadable text, or a
   caption in the wrong slot
 

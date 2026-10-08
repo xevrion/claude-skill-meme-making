@@ -1,6 +1,6 @@
 ---
 name: meme-maker
-description: Make memes that are actually funny, from a photo, a screenshot, a situation, or just a topic, and render them to image files in seconds. Use whenever the user asks for a meme, a reaction image, a captioned photo, "make this a meme", "meme this", a roast image, or a joke picture about their code, team, exam, friends, or life. Covers picking the right format for the joke, writing captions, 200+ classic templates with correct text placement (Drake, Distracted Boyfriend, Gru's Plan, Galaxy Brain, Two Buttons and more), Impact top/bottom text, modern white-bar captions, labels placed on objects in the user's own photos, multi-panel stacks, and animated GIFs.
+description: Make memes that are actually funny, from a photo, a screenshot, a situation, or just a topic, and render them to image files in seconds. Use whenever the user asks for a meme, a reaction image, a captioned photo, "make this a meme", "meme this", a roast image, or a joke picture about their code, team, exam, friends, or life. Covers picking the right format for the joke, writing captions, 200+ classic templates with correct text placement (Drake, Distracted Boyfriend, Gru's Plan, Galaxy Brain, Two Buttons and more), thousands more from imgflip's library including game, anime, and fandom characters, Impact top/bottom text, modern white-bar captions, labels placed on objects in the user's own photos, multi-panel stacks, and animated GIFs.
 ---
 
 # Making memes
@@ -28,22 +28,37 @@ render command prints the path it wrote. Output defaults to `./memes/` in the wo
 directory, named from the caption; pass `-o` to choose.
 
 ```bash
-M="uv run <skill-dir>/scripts/meme.py"
+M() { uv run <skill-dir>/scripts/meme.py "$@"; }   # a function, so zsh splits arguments too
 
-$M search distracted                       # find a template id
-$M template drake "fixing the bug" "renaming the variable so the bug feels different"
-$M template db "a new side project" "me" "the four side projects i already have"
-$M template fine "" "the CI has been red since tuesday" --animated   # '' leaves a slot empty
+M search distracted                        # find a template id
+M search malenia --pages 3                 # also searches imgflip's whole library
+M template drake "fixing the bug" "renaming the variable so the bug feels different"
+M template db "a new side project" "me" "the four side projects i already have"
+M template fine "" "the CI has been red since tuesday" --animated    # '' leaves a slot empty
 
-$M classic photo.jpg --top "when the build passes" --bottom "and you changed nothing"
-$M caption photo.jpg "me after saying 'quick fix' in standup"        # white bar above
-$M caption reaction.gif "..."                                         # gifs stay animated
+M classic photo.jpg --top "when the build passes" --bottom "and you changed nothing"
+M caption photo.jpg "me after saying 'quick fix' in standup"         # white bar above
+M caption reaction.gif "..."                                          # gifs stay animated
 
-$M grid photo.jpg -o /tmp/grid.png          # 10% grid overlay, for reading coordinates
-$M label photo.jpg "0.32,0.45:the deadline" "0.7,0.4,0.25:me, watching youtube"
-$M blank "two buttons"                      # a blank imgflip format, then grid + label
-$M stack before.png after.png               # vertical panels; --horizontal for side by side
+M grid photo.jpg -o /tmp/grid.png           # 10% grid overlay, for reading coordinates
+M label photo.jpg "0.32,0.45:the deadline" "0.7,0.4,0.25:me, watching youtube"
+M blank "two buttons"                       # a blank by name, then grid + label
+M blank 382599887                           # or by the imgflip id that `search` printed
+M stack before.png after.png                # vertical panels; --horizontal for side by side
 ```
+
+### Finding a template
+
+`search` checks three places: memegen's 212 templates (rendered with `template`, placement
+known), imgflip's current top 100, and imgflip's full user-uploaded library, which has
+thousands more, including character- and fandom-specific templates (a game boss, a show's
+reaction shot). Results marked `imgflip+` come from that library. They are blank only and
+you have never seen most of them, so fetch with `blank <id>` and view the image before
+writing captions: the template's meaning comes from what is in the picture. Some carry a
+small imgflip.com mark baked into the image by the uploader.
+
+For a fandom topic, search the character or work first. A template made from the actual
+character beats a generic format with their name typed on it.
 
 - `template` renders one of memegen's 200+ templates locally, using the image and text boxes
   from memegen's open source repo, so the output has no watermark. Use it whenever the format
@@ -80,6 +95,12 @@ $M stack before.png after.png               # vertical panels; --horizontal for 
    sameness, misidentification, smug calm in a disaster: see
    [references/formats.md](references/formats.md), organised by joke shape. With a user's
    photo, the format is usually `caption` or `label` on their image, not a template.
+   Across a session, spread out. Drake, Galaxy Brain, and Distracted Boyfriend are the
+   default reflex, and a batch built on them reads as one meme with the words swapped; a
+   real person said "does it know only these 3 images?" after seeing exactly that. Once a
+   format has been used, prefer a different one that fits the joke unless it is clearly best.
+   For fandom topics (games, books, shows), check anything recent before joking about it:
+   "still waiting for X" lands badly if X came out last month.
 4. **Write three candidate captions in your head and keep the one with a surprise.** The first
    idea is the one everyone has.
 5. **Render.**

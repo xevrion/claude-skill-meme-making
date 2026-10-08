@@ -102,6 +102,44 @@ def search(query):
     return hits
 
 
+def search_imgflip_site(query, pages=1):
+    """imgflip's own template search, which covers its whole user-uploaded library."""
+    seen, hits = set(), []
+    for page in range(1, pages + 1):
+        url = "https://imgflip.com/memesearch?" + urllib.parse.urlencode({"q": query, "page": page})
+        html = fetch(url, headers={"User-Agent": "Mozilla/5.0 (meme-maker-skill)"}).decode("utf-8", "replace")
+        found = re.findall(r'href="/meme/(\d+)/([^"]+)"', html)
+        if not found:
+            break
+        for tid, slug in found:
+            if tid not in seen:
+                seen.add(tid)
+                hits.append((tid, urllib.parse.unquote(slug).replace("-", " ")))
+    return hits
+
+
+def base36(n):
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    out = ""
+    while n:
+        n, r = divmod(n, 36)
+        out = digits[r] + out
+    return out or "0"
+
+
+def imgflip_blank_url(tid):
+    # imgflip serves every template's blank image at its id written in base 36
+    code = base36(int(tid))
+    for ext in ("jpg", "png", "gif"):
+        url = f"https://i.imgflip.com/{code}.{ext}"
+        try:
+            urllib.request.urlopen(urllib.request.Request(url, method="HEAD", headers=UA), timeout=15)
+            return url
+        except urllib.error.HTTPError:
+            continue
+    raise FileNotFoundError(f"no blank image found for imgflip template {tid}")
+
+
 # ---------- image io ----------
 
 def load(src):
@@ -328,11 +366,22 @@ def render_template_local(a):
 # ---------- commands ----------
 
 def cmd_search(a):
-    hits = search(" ".join(a.query))
-    if not hits:
-        print("no matches; try a shorter or different word")
+    query = " ".join(a.query)
+    hits = search(query)
     for src, tid, name, extra in hits[:40]:
         print(f"{src:8} {tid:24} {name}  ({extra})")
+    if a.local:
+        return
+    known = {h[1] for h in hits}
+    try:
+        site = [h for h in search_imgflip_site(query, a.pages) if h[0] not in known]
+    except Exception as e:
+        print(f"(imgflip site search failed: {e})", file=sys.stderr)
+        site = []
+    for tid, name in site:
+        print(f"{'imgflip+':8} {tid:24} {name}  (blank only, from imgflip's full library)")
+    if not hits and not site:
+        print("no matches; try a shorter or different word")
 
 
 def cmd_list(a):
@@ -353,7 +402,7 @@ def cmd_template(a):
         except Exception as e:
             print(f"warning: local render failed ({e}), using the hosted renderer",
                   file=sys.stderr)
-    body ={"template_id": a.id, "text": [t if t.strip() else " " for t in a.text],
+    body = {"template_id": a.id, "text": [t if t.strip() else " " for t in a.text],
             "extension": "gif" if a.animated else "png"}
     if a.style:
         body["style"] = a.style
@@ -371,27 +420,31 @@ def cmd_template(a):
     print(out)
 
 
-def cmd_blank(a):
-    key = norm(a.name)
+def find_blank(name):
+    """Image source for a template given a memegen id, an imgflip id, or a name."""
+    key = norm(name)
     for t in memegen_templates():
         if key in (norm(t["id"]), norm(t["name"])):
-            url = t["blank"]
-            break
-    else:
-        for t in imgflip_templates():
-            if key in (norm(t["id"]), norm(t["name"])):
-                url = t["url"]
-                break
-        else:
-            hits = search(a.name)
-            if not hits:
-                sys.exit(f"no template matches '{a.name}'")
-            src, tid = hits[0][0], hits[0][1]
-            pool = memegen_templates() if src == "memegen" else imgflip_templates()
-            t = next(t for t in pool if t["id"] == tid)
-            url = t.get("blank") or t["url"]
-            print(f"using closest match: {t['name']}", file=sys.stderr)
-    img = load(url)
+            return str(template_files(t["id"], None)[1])
+    for t in imgflip_templates():
+        if key in (norm(t["id"]), norm(t["name"])):
+            return t["url"]
+    if name.isdigit():
+        return imgflip_blank_url(name)
+    hits = search(name)
+    if hits:
+        src, tid, title = hits[0][:3]
+        print(f"using closest match: {title}", file=sys.stderr)
+        return find_blank(tid)
+    site = search_imgflip_site(name)
+    if not site:
+        sys.exit(f"no template matches '{name}'")
+    print(f"using closest imgflip match: {site[0][1]} ({site[0][0]})", file=sys.stderr)
+    return imgflip_blank_url(site[0][0])
+
+
+def cmd_blank(a):
+    img = load(find_blank(a.name))
     out = a.output or default_output(f"blank-{a.name}", False)
     img.convert("RGB").save(out)
     print(out)
@@ -518,6 +571,10 @@ def main():
 
     s = sub.add_parser("search", help="find a template id by name or keyword")
     s.add_argument("query", nargs="+")
+    s.add_argument("--pages", type=int, default=1,
+                   help="pages of imgflip's full-library results, about 20 per page")
+    s.add_argument("--local", action="store_true",
+                   help="only the cached memegen and imgflip top-100 catalogues")
     s.set_defaults(fn=cmd_search)
 
     s = sub.add_parser("list", help="list every memegen template id")
