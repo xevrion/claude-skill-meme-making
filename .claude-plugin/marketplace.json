@@ -1,0 +1,21 @@
+{
+  "name": "xevrion-skills",
+  "owner": {
+    "name": "Yash Bavadiya"
+  },
+  "metadata": {
+    "description": "Skills for making memes",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "meme-maker",
+      "description": "Turn a photo, a situation, or a topic into a meme that is actually funny: format chosen by joke shape, specific captions, 200+ templates with correct text placement, and local rendering for your own photos and GIFs.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/meme-maker"
+      ]
+    }
+  ]
+}
