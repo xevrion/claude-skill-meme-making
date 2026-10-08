@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.9"
-# dependencies = ["pillow>=10"]
+# dependencies = ["pillow>=10", "pyyaml>=6"]
 # ///
 """Render memes from templates or from any image.
 
@@ -26,10 +26,20 @@ except ImportError:
 
 HERE = Path(__file__).resolve().parent
 FONTS = HERE.parent / "assets" / "fonts"
-FONT_FILES = {"anton": FONTS / "Anton-Regular.ttf", "arimo": FONTS / "Arimo.ttf"}
-LINE_HEIGHT = {"anton": 1.12, "arimo": 1.22}
+FONT_FILES = {
+    "anton": FONTS / "Anton-Regular.ttf",
+    "arimo": FONTS / "Arimo.ttf",
+    "thick": FONTS / "TitilliumWeb-Black.ttf",
+    "thin": FONTS / "TitilliumWeb-SemiBold.ttf",
+}
+LINE_HEIGHT = {"anton": 1.12, "arimo": 1.22, "thick": 1.1, "thin": 1.15}
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "meme-maker"
 MEMEGEN = "https://api.memegen.link"
+# memegen is MIT licensed; its repo holds each template's image and text-box config
+MEMEGEN_RAW = "https://raw.githubusercontent.com/jacebrowning/memegen/main/templates"
+# memegen font names mapped to the bundled fonts; Impact and Segoe are not redistributable
+MEMEGEN_FONTS = {"thick": "thick", "titilliumweb": "thick", "thin": "thin",
+                 "titilliumweb-thin": "thin", "impact": "anton"}
 IMGFLIP = "https://api.imgflip.com/get_memes"
 UA = {"User-Agent": "meme-maker-skill/1.0"}
 CATALOGUE_TTL = 7 * 24 * 3600
@@ -200,19 +210,119 @@ def fit(text, font_name, max_w, max_h, start, minimum=10, weight=None, spacing=0
         widest = max((probe.textlength(l, font=fnt) for l in lines), default=0)
         fits = lh * len(lines) + pad <= max_h and widest + pad <= max_w and not broken
         if fits or size <= minimum:
-            return fnt, lines, lh
+            return fnt, balance(text, lines, fnt, max_w - pad, probe), lh
         size = max(minimum, int(size * 0.92))
 
 
-def draw_block(draw, lines, fnt, lh, cx, top, fill, stroke_w=0, stroke_fill="black", align="center"):
+def balance(text, lines, fnt, max_w, probe):
+    """Narrow the wrap width while the line count holds, so no line ends with one lonely word."""
+    if len(lines) < 2:
+        return lines
+    width = max_w
+    while True:
+        broken = []
+        trial = wrap(text, fnt, width * 0.95, probe, broken)
+        if len(trial) != len(lines) or broken:
+            return lines
+        lines, width = trial, width * 0.95
+
+
+def draw_block(draw, lines, fnt, lh, x, top, fill, stroke_w=0, stroke_fill="black", align="center"):
+    anchor = {"center": "ma", "left": "la", "right": "ra"}[align]
     for i, line in enumerate(lines):
-        y = top + i * lh
-        if align == "center":
-            draw.text((cx, y), line, font=fnt, fill=fill, anchor="ma",
-                      stroke_width=stroke_w, stroke_fill=stroke_fill)
+        draw.text((x, top + i * lh), line, font=fnt, fill=fill, anchor=anchor,
+                  stroke_width=stroke_w, stroke_fill=stroke_fill)
+
+
+# ---------- memegen templates rendered locally ----------
+
+def template_files(tid, style):
+    """Config and image for a memegen template, fetched from its repo once and cached."""
+    import yaml
+
+    folder = CACHE / "templates" / tid
+    folder.mkdir(parents=True, exist_ok=True)
+    cfg_path = folder / "config.yml"
+    if not cfg_path.exists():
+        cfg_path.write_bytes(fetch(f"{MEMEGEN_RAW}/{tid}/config.yml"))
+    name = style or "default"
+    for ext in ("png", "jpg", "gif", "jpeg", "webp"):
+        img_path = folder / f"{name}.{ext}"
+        if img_path.exists():
+            break
+    else:
+        for ext in ("png", "jpg", "gif", "jpeg", "webp"):
+            try:
+                data = fetch(f"{MEMEGEN_RAW}/{tid}/{name}.{ext}")
+            except urllib.error.HTTPError:
+                continue
+            img_path = folder / f"{name}.{ext}"
+            img_path.write_bytes(data)
+            break
         else:
-            draw.text((cx, y), line, font=fnt, fill=fill, anchor="la",
-                      stroke_width=stroke_w, stroke_fill=stroke_fill)
+            raise FileNotFoundError(f"no image for style '{name}' of template '{tid}'")
+    return yaml.safe_load(cfg_path.read_text()), img_path
+
+
+def stylize(text, style):
+    if style == "upper":
+        return text.upper()
+    if style == "lower":
+        return text.lower()
+    if style == "mock":
+        return "".join(c.upper() if i % 2 else c.lower() for i, c in enumerate(text))
+    if style == "none":
+        return text
+    text = re.sub(r"\bi\b", "I", text)
+    return text[:1].upper() + text[1:] if text.islower() else text
+
+
+def draw_slot(im, spec, text, font_override):
+    w, h = im.size
+    angle = float(spec.get("angle") or 0)
+    bx, by = float(spec.get("anchor_x", 0)) * w, float(spec.get("anchor_y", 0)) * h
+    bw, bh = float(spec.get("scale_x", 1)) * w, float(spec.get("scale_y", 0.2)) * h
+    name = MEMEGEN_FONTS.get(font_override or spec.get("font") or "thick", "arimo")
+    color = spec.get("color") or "white"
+    plain = color == "black"
+    fnt, lines, lh = fit(stylize(text, spec.get("style", "upper")), name, bw, bh,
+                         start=h / (4 if angle else 9), minimum=8,
+                         weight=700 if name == "arimo" else None,
+                         stroke=0 if plain else 0.06)
+    sw = 0 if plain else max(1, round(fnt.size * 0.06))
+    align = spec.get("align") or "center"
+    x = {"center": bw / 2, "left": 0, "right": bw}.get(align, bw / 2)
+    # pad the layer so descenders and outlines are not clipped at the box edge
+    pad = fnt.size
+    top = (bh - lh * len(lines)) / 2
+    layer = Image.new("RGBA", (int(bw) + 2 * pad, int(bh) + 2 * pad), (0, 0, 0, 0))
+    draw_block(ImageDraw.Draw(layer), lines, fnt, lh, x + pad, top + pad, color, sw, "black",
+               align if align in ("left", "right") else "center")
+    if angle:
+        layer = layer.rotate(angle, resample=Image.BICUBIC, expand=True)
+    cx, cy = bx + bw / 2, by + bh / 2
+    im.alpha_composite(layer, (int(cx - layer.width / 2), int(cy - layer.height / 2)))
+
+
+def render_template_local(a):
+    cfg, img_path = template_files(a.id, a.style)
+    img = Image.open(img_path)
+    frames, durations = frames_of(img)
+    if not a.animated:
+        frames, durations = frames[:1], None
+    slots = cfg.get("text") or []
+    if len(a.text) > len(slots):
+        print(f"warning: {a.id} has {len(slots)} slots, extra text ignored", file=sys.stderr)
+    done = []
+    for f in frames:
+        for spec, text in zip(slots, a.text):
+            if text.strip():
+                draw_slot(f, spec, text, a.font)
+        if a.width:
+            f = f.resize((a.width, round(f.height * a.width / f.width)), Image.LANCZOS)
+        done.append(f)
+    stem = " ".join(a.text) or a.id
+    save(done, durations, a.output or default_output(stem, bool(durations)))
 
 
 # ---------- commands ----------
@@ -235,7 +345,15 @@ def cmd_template(a):
     if ids and a.id not in ids:
         sys.exit(f"unknown memegen template '{a.id}'. Use `search` to find the id, or "
                  f"`blank` + `label` for formats memegen does not have.")
-    body = {"template_id": a.id, "text": [t if t.strip() else " " for t in a.text],
+    if not a.hosted:
+        try:
+            return render_template_local(a)
+        except ImportError:
+            print("warning: pyyaml missing, using the hosted renderer", file=sys.stderr)
+        except Exception as e:
+            print(f"warning: local render failed ({e}), using the hosted renderer",
+                  file=sys.stderr)
+    body ={"template_id": a.id, "text": [t if t.strip() else " " for t in a.text],
             "extension": "gif" if a.animated else "png"}
     if a.style:
         body["style"] = a.style
@@ -409,9 +527,11 @@ def main():
     s.add_argument("id")
     s.add_argument("text", nargs="*", help="one argument per text slot, '' to leave a slot empty")
     s.add_argument("--style", help="template style variant, see `search` output on memegen.link")
-    s.add_argument("--font", help="memegen font id, e.g. impact, notosans, kalam")
+    s.add_argument("--font", help="memegen font id: thick (default), thin, impact")
     s.add_argument("--width", type=int)
     s.add_argument("--animated", action="store_true", help="gif output for animated templates")
+    s.add_argument("--hosted", action="store_true",
+                   help="render on memegen.link instead of locally (adds its watermark)")
     s.add_argument("-o", "--output")
     s.set_defaults(fn=cmd_template)
 

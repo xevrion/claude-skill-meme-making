@@ -13,8 +13,9 @@ renderer, so you never have to explain fonts or text placement.
 - Picks the format from the shape of the joke (preference, temptation, escalation, false
   sameness, misidentification) using a reference of 40+ formats with what each one means
 - Writes captions that are specific, short, in the audience's own words, with the punchline last
-- Renders 200+ classic templates through [memegen.link](https://memegen.link) with correct
-  per-slot text placement, with slot order checked by rendering each template
+- Renders 200+ classic templates locally from [memegen](https://github.com/jacebrowning/memegen)'s
+  open source template data, so text placement is correct and there is no watermark, ready
+  to post
 - Captions your own photos locally: Impact top and bottom text, modern white-bar captions,
   or labels placed on the people and objects in the picture
 - Keeps animated GIFs animated, stacks panels, and falls back to imgflip blanks for formats
@@ -50,7 +51,9 @@ uv run skills/meme-maker/scripts/meme.py template drake \
 
 ## Credits
 
-Templates are rendered by [memegen.link](https://github.com/jacebrowning/memegen) and blanks
-come from [imgflip](https://imgflip.com). Bundled fonts are
-[Anton](https://github.com/googlefonts/AntonFont) and [Arimo](https://github.com/googlefonts/arimo),
-both under the SIL Open Font License; licence texts are in `skills/meme-maker/assets/fonts/`.
+Template images and text-box layouts come from
+[memegen](https://github.com/jacebrowning/memegen) (MIT), fetched on first use and cached;
+blanks for other formats come from [imgflip](https://imgflip.com). Bundled fonts are
+[Anton](https://github.com/googlefonts/AntonFont), [Arimo](https://github.com/googlefonts/arimo)
+and [Titillium Web](https://fonts.google.com/specimen/Titillium+Web), all under the SIL Open
+Font License; licence texts are in `skills/meme-maker/assets/fonts/`.

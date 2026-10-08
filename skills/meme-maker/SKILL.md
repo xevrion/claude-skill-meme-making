@@ -45,12 +45,17 @@ $M blank "two buttons"                      # a blank imgflip format, then grid 
 $M stack before.png after.png               # vertical panels; --horizontal for side by side
 ```
 
-- `template` sends text to memegen.link, which knows where every slot goes on 200+ templates.
-  Use it whenever the format exists there; the placement will be better than anything you
-  estimate by hand. Slots are positional. Check the order in
-  [references/formats.md](references/formats.md) for multi-panel templates, because getting it
-  wrong puts the punchline on the wrong character. Templates carry a small memegen.link
-  watermark.
+- `template` renders one of memegen's 200+ templates locally, using the image and text boxes
+  from memegen's open source repo, so the output has no watermark. Use it whenever the format
+  exists there; the placement will be better than anything you estimate by hand. Slots are
+  positional. Check the order in [references/formats.md](references/formats.md) for
+  multi-panel templates, because getting it wrong puts the punchline on the wrong character.
+  `--hosted` renders on memegen.link instead, which adds its watermark; the script also falls
+  back to it on its own if the local render fails.
+- A caption that starts with `-` (a CLI flag, say) is read as an option. Put `--` before the
+  text arguments: `template vince -o out.png -- "a" "b" "--force"`.
+- A long unbreakable token such as a flag or a URL shrinks the whole slot. Force a break with a
+  real newline inside the argument, e.g. `$'--dangerously-\nskip-permissions'` in bash or zsh.
 - `classic` is white Impact-style capitals with a black outline, top and bottom. Right for
   photos where the text can sit on the image.
 - `caption` is the modern format: black text on a white bar above the image. Right for
@@ -121,9 +126,9 @@ format itself and fine to use.
 
 ## When things fail
 
-- **No network.** `template`, `search`, and `blank` need the internet; `classic`, `caption`,
-  `label`, `stack`, and `grid` work fully offline on local images. The template catalogues are
-  cached for a week in `~/.cache/meme-maker/`.
+- **No network.** `search`, `blank`, and the first use of each `template` need the internet;
+  `classic`, `caption`, `label`, `stack`, and `grid` work fully offline on local images. The
+  catalogues are cached for a week and template images forever, in `~/.cache/meme-maker/`.
 - **Unknown template id.** Run `search` with one distinctive word. If memegen does not have the
   format, `blank` fetches it from imgflip's top 100; if neither has it, find the image URL and
   use `label`.
